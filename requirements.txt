@@ -15,4 +15,4 @@ torch==2.2.2
 torchaudio==2.2.2
 soundfile==0.12.1
 chattts==0.2.3
-huggingface_hub==0.22.0
+huggingface-hub==0.26.0
