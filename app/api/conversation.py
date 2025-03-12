@@ -104,11 +104,42 @@ async def generate_conversation(
         return ProcessResponse(
             success=False,
             message=f"Error processing file: {str(e)}"
-        ) 
+        )
         
+@router.get("conversation/history/{assignment_name}") 
+async def get_conversation_history(
+   assignment_name: str,
+   db: Session = Depends(get_db)
+):
+    """
+    Get conversation history by assignment name.
+    """
+    # Remove file extension if exist
+    assignment_name_cleaned = os.path.splitext(assignment_name)[0]
+    conversation_record = GeneratedFileRepository.get_by_assignment_name(db, assignment_name_cleaned)
+    if not conversation_record:
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found"
+        )
+    
+    with open(conversation_record.generated_filepath, 'r') as f:
+        conversation_data = json.load(f)
+
+    # # Add generated file ID to response
+    # conversation_data["generated_file_id"] = conversation_record.id
+    
+    return ConversationResponse(
+        generated_file_id=conversation_record.id,
+        conversations=conversation_data["conversations"]
+    )   
+    
+    
+    
 @router.get("/conversation/{generated_file_id}")
 async def get_conversation_by_generated_file_id(
-    generated_file_id: int, db: Session = Depends(get_db)):
+    generated_file_id: int, 
+    db: Session = Depends(get_db)):
     """
     Get a conversation by its ID.
     """
