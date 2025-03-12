@@ -16,7 +16,7 @@ from app.utils.file_processing import (
     ensure_output_directory,
     save_json_response
 )
-from app.utils.audio_generator import generate_audio_for_conversation, generate_audio_in_subprocess
+from app.utils.audio_generator import process_conversation
 
 
 router = APIRouter()
@@ -80,9 +80,8 @@ async def generate_conversation(
             conversation["conversation_id"] = conversation_id
             # Generate audio in the background
             print(f"Generating audio for conversation {conversation_id}")
-            # background_tasks.add_task(test)
             background_tasks.add_task(
-                generate_audio_in_subprocess,
+                process_conversation,
                 db=db,
                 file_id=file_record.id,
                 conversation=conversation,
@@ -106,7 +105,7 @@ async def generate_conversation(
             message=f"Error processing file: {str(e)}"
         )
         
-@router.get("conversation/history/{assignment_name}") 
+@router.get("/conversation/history/{assignment_name}") 
 async def get_conversation_history(
    assignment_name: str,
    db: Session = Depends(get_db)
@@ -181,4 +180,10 @@ async def get_audio_file_by_conversation_id(
         )
         
     audio_path = audio_record.generated_filepath
-    return FileResponse(audio_path)
+    if not os.path.exists(audio_path):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Audio file for conversation {conversation_id} not found"
+        )
+    else:
+        return FileResponse(audio_path)

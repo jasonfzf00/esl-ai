@@ -3,6 +3,8 @@ from fastapi import APIRouter
 from sqlalchemy.orm import Session
 import json
 import re
+import asyncio
+from concurrent.futures import ProcessPoolExecutor
 
 from app.db.repository import GeneratedAudioRepository
 from app.services.chattts_service import ChatttsService
@@ -22,10 +24,30 @@ def clean_text_for_tts(text: str) -> str:
     text = re.sub(r'[^\w\s.,]', '', text)  # Remove any other special characters
     return text.strip()
 
-
-async def generate_audio_for_conversation(db: Session, file_id: int, conversation: dict, output_dir: str, file_basename: str):
+def generate_audio(text: str, output_dir: str, file_prefix: str) -> list[str]:
     """
-    Generate audio for a conversation and save it to the database.
+    Generate audio for text. This function runs in a subprocess.
+    """
+    try:
+        # Initialize ChatTTS service
+        tts_service = ChatttsService()
+        
+        # Generate audio
+        wav_paths = tts_service.generateSound(
+            texts=[text],
+            savePath=output_dir,
+            filePrefix=file_prefix
+        )
+        
+        return wav_paths
+        
+    except Exception as e:
+        print(f"Error generating audio: {str(e)}")
+        return []
+
+async def process_conversation(db: Session, file_id: int, conversation: dict, output_dir: str, file_basename: str):
+    """
+    Process a conversation and generate audio.
     """
     try:
         # Extract conversation data
@@ -35,7 +57,6 @@ async def generate_audio_for_conversation(db: Session, file_id: int, conversatio
         print(f"Processing conversation {conversation_id}: {conversation}")
         
         # Extract text from the conversation
-        # The conversation might have different structures depending on the format
         text = None
         speaker = None
         
@@ -62,12 +83,16 @@ async def generate_audio_for_conversation(db: Session, file_id: int, conversatio
         cleaned_text = clean_text_for_tts(text)
         print(f"Processing text for conversation {conversation_id}: '{cleaned_text}'")
         
-        # Generate audio for the cleaned text
-        wav_paths = chattts_service.generateSound(
-            texts=[cleaned_text],
-            savePath=output_dir,
-            filePrefix=f"{file_basename}_{conversation_id}_{speaker}_"
-        )
+        # Generate audio in subprocess
+        with ProcessPoolExecutor() as pool:
+            file_prefix = f"{file_basename}_{conversation_id}_{speaker}_"
+            wav_paths = await asyncio.get_event_loop().run_in_executor(
+                pool,
+                generate_audio,
+                cleaned_text,
+                output_dir,
+                file_prefix
+            )
         
         # Save audio file information to database
         for wav_path in wav_paths:
@@ -80,25 +105,6 @@ async def generate_audio_for_conversation(db: Session, file_id: int, conversatio
             )
             
     except Exception as e:
-        print(f"Error generating audio for conversation {conversation_id if 'conversation_id' in conversation else 'unknown'}: {str(e)}")
+        print(f"Error processing conversation {conversation_id if 'conversation_id' in conversation else 'unknown'}: {str(e)}")
         print(f"Conversation data: {conversation}")
         # Continue with other conversations even if one fails
-        
-async def generate_audio_in_subprocess(db: Session, file_id: int, conversation: dict, output_dir: str, file_basename: str):
-    """
-    Wrapper to run generate_audio_for_conversation in a separate process to avoid blocking.
-    """
-    import asyncio
-    from concurrent.futures import ProcessPoolExecutor
-    
-    # Create process pool and run the audio generation
-    with ProcessPoolExecutor() as pool:
-        await asyncio.get_event_loop().run_in_executor(
-            pool,
-            generate_audio_for_conversation,
-            db,
-            file_id, 
-            conversation,
-            output_dir,
-            file_basename
-        )
