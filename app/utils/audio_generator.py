@@ -22,6 +22,7 @@ def clean_text_for_tts(text: str) -> str:
     text = re.sub(r'[^\w\s.,]', '', text)  # Remove any other special characters
     return text.strip()
 
+
 async def generate_audio_for_conversation(db: Session, file_id: int, conversation: dict, output_dir: str, file_basename: str):
     """
     Generate audio for a conversation and save it to the database.
@@ -82,3 +83,22 @@ async def generate_audio_for_conversation(db: Session, file_id: int, conversatio
         print(f"Error generating audio for conversation {conversation_id if 'conversation_id' in conversation else 'unknown'}: {str(e)}")
         print(f"Conversation data: {conversation}")
         # Continue with other conversations even if one fails
+        
+async def generate_audio_in_subprocess(db: Session, file_id: int, conversation: dict, output_dir: str, file_basename: str):
+    """
+    Wrapper to run generate_audio_for_conversation in a separate process to avoid blocking.
+    """
+    import asyncio
+    from concurrent.futures import ProcessPoolExecutor
+    
+    # Create process pool and run the audio generation
+    with ProcessPoolExecutor() as pool:
+        await asyncio.get_event_loop().run_in_executor(
+            pool,
+            generate_audio_for_conversation,
+            db,
+            file_id, 
+            conversation,
+            output_dir,
+            file_basename
+        )

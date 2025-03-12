@@ -4,6 +4,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 import json
 import re
+import time
 
 from app.core.config import settings
 from app.db.session import get_db
@@ -15,12 +16,11 @@ from app.utils.file_processing import (
     ensure_output_directory,
     save_json_response
 )
-from app.utils.audio_generator import generate_audio_for_conversation
+from app.utils.audio_generator import generate_audio_for_conversation, generate_audio_in_subprocess
 
 
 router = APIRouter()
 ollama_service = OllamaService()
-
 
 @router.post("/generate-conversation", response_model=ProcessResponse)
 async def generate_conversation(
@@ -80,8 +80,9 @@ async def generate_conversation(
             conversation["conversation_id"] = conversation_id
             # Generate audio in the background
             print(f"Generating audio for conversation {conversation_id}")
+            # background_tasks.add_task(test)
             background_tasks.add_task(
-                generate_audio_for_conversation,
+                generate_audio_in_subprocess,
                 db=db,
                 file_id=file_record.id,
                 conversation=conversation,
@@ -95,7 +96,7 @@ async def generate_conversation(
         return ProcessResponse(
             success=True,
             message="File processed successfully",
-            file_path=output_path,
+            generated_file_id=file_record.id,
             grade_level=grade_level
         )
         
@@ -105,21 +106,19 @@ async def generate_conversation(
             message=f"Error processing file: {str(e)}"
         ) 
         
-@router.get("/conversation/{file_name}")
-async def get_conversation_by_file_name(
-    file_name: str, db: Session = Depends(get_db)):
+@router.get("/conversation/{generated_file_id}")
+async def get_conversation_by_generated_file_id(
+    generated_file_id: int, db: Session = Depends(get_db)):
     """
     Get a conversation by its ID.
     """
-    file_basename = os.path.splitext(file_name)[0] # remove file extension
-    conversation_record = GeneratedFileRepository.get_by_original_filename(db, file_basename)
+    # file_basename = os.path.splitext(file_name)[0] # remove file extension
+    conversation_record = GeneratedFileRepository.get_by_generated_file_id(db, generated_file_id)
     if not conversation_record:
         raise HTTPException(
             status_code=404,
             detail="Conversation not found"
         )
-        
-    generated_file_id = conversation_record.id
     # Load conversation from generated file
     with open(conversation_record.generated_filepath, 'r') as f:
         conversation_data = json.load(f)
@@ -152,4 +151,3 @@ async def get_audio_file_by_conversation_id(
         
     audio_path = audio_record.generated_filepath
     return FileResponse(audio_path)
-    

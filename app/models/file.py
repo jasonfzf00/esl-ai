@@ -23,7 +23,7 @@ class ProcessResponse(BaseModel):
     """Response model for file processing."""
     success: bool
     message: str
-    file_path: str | None = None
+    generated_file_id: int | None = None
     grade_level: int | None = None 
     
 class ConversationResponse(BaseModel):

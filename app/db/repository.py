@@ -26,11 +26,11 @@ class GeneratedFileRepository:
         return db_file
     
     @staticmethod
-    def get_by_original_filename(db: Session, filename: str) -> list[GeneratedFile]:
+    def get_by_generated_file_id(db: Session, generated_file_id: int) -> GeneratedFile:
         """
         Get generated files by original filename.
         """
-        return db.query(GeneratedFile).filter(GeneratedFile.original_filename == filename).first()
+        return db.query(GeneratedFile).filter(GeneratedFile.id == generated_file_id).first()
     
     @staticmethod
     def get_all(db: Session, skip: int = 0, limit: int = 100) -> list[GeneratedFile]:
